@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="vi">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kiểm Tra Checksum SHA256</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: #f0f0f0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+            }
+            .container {
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                width: 400px;
+            }
+            h1 {
+                font-size: 1.5em;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+            form {
+                display: flex;
+                flex-direction: column;
+            }
+            label {
+                margin-bottom: 10px;
+                font-weight: bold;
+            }
+            input[type="file"],
+            input[type="text"] {
+                margin-bottom: 10px;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+            button {
+                padding: 10px;
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 1em;
+            }
+            button:disabled {
+                background-color: #ccc;
+                cursor: not-allowed;
+            }
+            button:hover:not(:disabled) {
+                background-color: #45a049;
+            }
+            #loading {
+                display: none;
+                margin-top: 20px;
+            }
+            #progress-bar {
+                width: 100%;
+                background-color: #e0e0e0;
+                border-radius: 4px;
+                height: 25px;
+                line-height: 25px;
+                color: #fff;
+                background-color: #4caf50;
+                text-align: center;
+            }
+            .result {
+                margin-top: 20px;
+                font-size: 1.2em;
+            }
+            .result.success {
+                color: #4caf50;
+            }
+            .result.error {
+                color: #f44336;
+            }
+            #checksum-result {
+                word-wrap: break-word; /* Đảm bảo nội dung không tràn ra ngoài */
+                white-space: pre-wrap; /* Đảm bảo xuống dòng nếu cần */
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Kiểm Tra Checksum SHA256 của Tệp</h1>
+            <form id="upload-form">
+                <label for="file-input">Chọn tệp:</label>
+                <input type="file" id="file-input" required />
+                <button type="submit" id="calculate-button">Tính Toán</button>
+            </form>
+            <div id="loading">
+                <div id="progress-bar">Đang xử lý...</div>
+            </div>
+            <h2>Kết quả checksum SHA256:</h2>
+            <p id="checksum-result"></p>
+            <form id="compare-form">
+                <label for="input-checksum">Nhập checksum để so sánh:</label>
+                <input type="text" id="input-checksum" />
+                <button type="submit">So Sánh</button>
+            </form>
+            <p id="compare-result" class="result"></p>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+        <script>
+            function calculateSHA256(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    const chunkSize = 1024 * 1024; // 1MB
+                    let offset = 0;
+                    const sha256 = CryptoJS.algo.SHA256.create();
+
+                    reader.onload = function (event) {
+                        sha256.update(
+                            CryptoJS.lib.WordArray.create(event.target.result)
+                        );
+                        offset += chunkSize;
+                        if (offset >= file.size) {
+                            const hash = sha256.finalize();
+                            resolve(hash.toString(CryptoJS.enc.Hex));
+                        } else {
+                            updateProgress((offset / file.size) * 100);
+                            readNextChunk();
+                        }
+                    };
+
+                    reader.onerror = function (error) {
+                        reject(error);
+                    };
+
+                    function readNextChunk() {
+                        const slice = file.slice(offset, offset + chunkSize);
+                        reader.readAsArrayBuffer(slice);
+                    }
+
+                    function updateProgress(percent) {
+                        const progressBar =
+                            document.getElementById("progress-bar");
+                        progressBar.style.width = percent + "%";
+                        progressBar.textContent =
+                            "Đang xử lý... " + Math.round(percent) + "%";
+                    }
+
+                    document.getElementById("loading").style.display = "block";
+                    readNextChunk();
+                });
+            }
+
+            document
+                .getElementById("upload-form")
+                .addEventListener("submit", async function (event) {
+                    event.preventDefault();
+                    const fileInput = document.getElementById("file-input");
+                    const calculateButton =
+                        document.getElementById("calculate-button");
+                    if (fileInput.files.length === 0) {
+                        alert("Vui lòng chọn một tệp.");
+                        return;
+                    }
+                    const file = fileInput.files[0];
+                    try {
+                        calculateButton.disabled = true; // Khóa nút "Tính Toán"
+                        const checksum = await calculateSHA256(file);
+                        document.getElementById("checksum-result").textContent =
+                            checksum;
+                    } catch (error) {
+                        console.error("Lỗi khi tính toán checksum:", error);
+                        document.getElementById("checksum-result").textContent =
+                            "Đã xảy ra lỗi khi tính toán checksum.";
+                    } finally {
+                        document.getElementById("loading").style.display =
+                            "none";
+                        calculateButton.disabled = false; // Bỏ khóa nút "Tính Toán"
+                    }
+                });
+
+            document
+                .getElementById("compare-form")
+                .addEventListener("submit", function (event) {
+                    event.preventDefault();
+                    const calculatedChecksum = document
+                        .getElementById("checksum-result")
+                        .textContent.trim();
+                    const inputChecksum = document
+                        .getElementById("input-checksum")
+                        .value.trim();
+                    const resultElement =
+                        document.getElementById("compare-result");
+
+                    if (inputChecksum === "") {
+                        resultElement.textContent =
+                            "Vui lòng nhập checksum để so sánh.";
+                        resultElement.className = "result error";
+                        return;
+                    }
+
+                    if (inputChecksum === calculatedChecksum) {
+                        resultElement.textContent = "Checksum khớp!";
+                        resultElement.className = "result success";
+                    } else {
+                        resultElement.textContent = "Checksum không khớp!";
+                        resultElement.className = "result error";
+                    }
+                });
+        </script>
+    </body>
+</html>
